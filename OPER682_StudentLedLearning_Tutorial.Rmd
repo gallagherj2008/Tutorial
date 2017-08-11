@@ -12,7 +12,7 @@ output: html_document
 
 
 
-```{r echo = F, eval = F, warning = F}
+```{r echo = F, eval = T, warning = F}
 
 setDownloadURI <- function(list, filename = stop("'filename' must be specified"), textHTML = "Click here to download the data.", fileext = "RData", envir = parent.frame()){
   require(base64enc,quietly = TRUE)
@@ -53,18 +53,19 @@ pre code, pre, code {
 
 One method for cluster analysis is the non-parametric _k_ - Nearest Neighbors algorithm.
 This supervised learning method classifies an unknown data point by assuming
-that any unknown point can best be described by similar points nearby. 
+that an unknown point's class will be similar to nearby points. 
 The model begins by calculating
 the distance (often euclidean, but can be other measures) to the _k = 1, 2, ... n_
 nearest data points. After identifying the nearest neighbors, the model then 
 counts the number of different class types and classifies the unknown point based
 on the plurality of class votes. For example, in a _k=3_ model, if the 3 nearest
 points are class 1, class 1, and class 2, the model classifies the unknown point as
-class 1. This modeling technique is extremely easy to use and understand
+class 1. This modeling technique is a straightforward classification technique
+that can be applied to many problems.
 
 ## tl;dr
 
-This tutorial servesas an introduction to the _k_-Nearest Neighbors classification tecnique and covers:
+This tutorial serves as an introduction to the _k_-Nearest Neighbors classification technique and covers:
 
 1. [Replication Requirements](#replication): What you'll need to reproduce the analysis  in this tutorial.
 
@@ -76,32 +77,32 @@ This tutorial servesas an introduction to the _k_-Nearest Neighbors classificati
 
 5. [Selecting the best _k_](#bestk): Select the level of K that gives you the best test set accuracy values.
 
-6. [Learn More](#learnmore): Visit these resources to learn more about _k_ -NN.
+6. [Points of Note](#note): Points of note regarding using _k_-NN
+
+7. [Learn More](#learnmore): Visit these resources to learn more about _k_ -NN.
 
 ## Modeling 
 
 ### Replication requirements {#replication}
 
 To reproduce the results below you will need to download the genders dataset
-located at the following link. Make sure you save this file as an .RData file
-type. Additionally, the `tidyverse`, `class`, 'leap', and `ggplot2` packages will be
+located at the following link. Make sure you save this file as `voicedata.RData`.
+Additionally, the `tidyverse`, `class`, 'knitr', 'kableExtra', and 'leap' packages will be
 used for the analysis.
 
 ```{r results='asis',echo=FALSE,message=FALSE, warning = F}
 
 library(tidyverse)
 library(class)
-library(caret)
 library(leaps)
 library(knitr)
 library(readr)
-library(BayesFactorExtras)
 library(kableExtra)
 options(knitr.table.format = "html")
 
 voice <- read_csv("C:/Users/james_vldwy/Desktop/OPER682/OPER682/CourseWork/Student Led Learning/Data/voice.csv", na = "0")
   
-createDownloadURI("voice", filename = "voicedata", textHTM = "Click here to download the data. Make sure you save the file as voicedata.RData")
+setDownloadURI("voice", filename = "voicedata", textHTM = "Download Data")
 
 
 ```
@@ -269,7 +270,7 @@ so that we can plot the results and see what's happening  visually.
 First, do the best subset selection with the command
 `best_subset <- regsubsets(label ~ ., voice, nvmax = 1)`
 
-```{r echo = F, warning = F, message = F, results = 'hide'}
+```{r echo = T, warning = F, message = F, results = 'hide'}
 
 best_subset <- regsubsets(label ~ ., voice, nvmax = 1)
 
@@ -279,9 +280,9 @@ best_subset <- regsubsets(label ~ ., voice, nvmax = 1)
 ```{r echo = T, warning = F, message = F}
 
 summary(best_subset)
-  
 
 ```
+
 
 The best subset selection shows that the `IQR` and `meanfun` features are
 the best two-feature combination available.
@@ -289,7 +290,7 @@ the best two-feature combination available.
 We'll plot these two variables against each other to see if there are any clear
 clusters in the data set
 
-```{r echo = F, message = F, warning = F}
+```{r echo = T, message = F, warning = F}
 
 
   ggplot() +
@@ -380,7 +381,8 @@ for (i in 1:num_k) {
 
 
 By finding the best accuracy from the list, we see that the best _k_ for this data set is `r bestk` with an accuracy of `r round(bestaccuracy, digits = 4)*100`%.
-We can validate that by plotting the average accuracy vector over
+We can validate that by plotting the average accuracy vector as _k_ increases. 
+
 
 ```{r echo= T, message = F, warning = F, fig.align = 'center'}
 
@@ -398,14 +400,41 @@ averageaccuracy %>%
 
 ```
 
+The plot shows that as _k_ increases, the plot reaches a  maximum at _k_ = `r bestk`
+
+
+## Points of Note {#note}
+
+We've shown that _k_-NN can be a fairly effective classification method. However,
+there are certain things to understand and account for when conducting classification
+using this method. 
+
+1) The data input works with numerical inputs. For
+non-numerical inputs dummy variables can be created to transform factors into 
+binary (1 or 0) variables, but this can greatly increase the dimensionality of the
+problem.
+
+2) Distances calculations are affected by scale. For example,
+a dataset with one variable on the order of millions and another on the order of
+tens will overvalue differences in the first variable at the expense of the second.
+This can be overcome by standardizing (subtract the mean, divide by standard error)
+all of the input variables, but analysts should account for the additional
+computational effort required.
+
+3) This classification technique can be computationally expensive on very large
+datasets. Unlike, say a regression equation where a new point is merely put into a 
+function and a value is returned, new data points in a _k_-NN model are compared
+to __every__ other point in the data set. For extremely large datasets, this
+may be prohibitive for effective modeling.
+
+
+
 ## Learn More {#learnmore}
 
 This tutorial will help you learn the basics about _k_ Nearest Neighbors. To learn
 more visit the
 [_Introduction to Statistical Learning in R_](http://www-bcf.usc.edu/~gareth/ISL/)
 webpage.
-
-[^1]: This data was collected by Korey Becker and is accessible [here](https://www.kaggle.com/primaryobjects/voicegender)
 
 
 ## Follow-on Exercises
@@ -416,4 +445,7 @@ Using the `iris` data set:
 2. Build  a kNN model based on the three classification types. What is the 
 test accuracy when `k=1`?
 3. Which `k` is best?
+
+
+[^1]: This data was collected by Korey Becker and is accessible [here](https://www.kaggle.com/primaryobjects/voicegender)
 
