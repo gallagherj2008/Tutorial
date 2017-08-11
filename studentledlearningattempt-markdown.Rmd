@@ -1,0 +1,419 @@
+---
+title: "k-Nearest Neighbors Tutorial"
+output: html_document
+
+
+
+
+
+---
+
+
+
+
+
+```{r echo = F, eval = F, warning = F}
+
+setDownloadURI <- function(list, filename = stop("'filename' must be specified"), textHTML = "Click here to download the data.", fileext = "RData", envir = parent.frame()){
+  require(base64enc,quietly = TRUE)
+  divname = paste(sample(LETTERS),collapse="")
+  tf = tempfile(pattern=filename, fileext = fileext)
+  save(list = list, file = tf, envir = envir)
+  filenameWithExt = paste(filename,fileext,sep=".")
+  
+  uri = dataURI(file = tf, mime = "application/octet-stream", encoding = "base64")
+  cat("<a style='text-decoration: none' id='",divname,"'></a>
+    <script>
+    var a = document.createElement('a');
+    var div = document.getElementById('",divname,"');
+    div.appendChild(a);
+    a.setAttribute('href', '",uri,"');
+    a.innerHTML = '",textHTML,"' + ' (",filenameWithExt,")';
+    if (typeof a.download != 'undefined') {
+      a.setAttribute('download', '",filenameWithExt,"');
+    }else{
+      a.setAttribute('onclick', 'confirm(\"Your browser does not support the download HTML5 attribute. You must rename the file to ",filenameWithExt," after downloading it (or use Chrome/Firefox/Opera). \")');
+    }
+    </script>",
+    sep="")
+}
+
+```
+```{css echo = F, warning = F, eval = F}
+pre code, pre, code {
+  white-space: pre !important;
+  overflow-x: scroll !important;
+  word-break: keep-all !important;
+  word-wrap: initial !important;
+}
+```
+
+
+# A Tutorial on _k_- Nearest Neighbors
+
+One method for cluster analysis is the non-parametric _k_ - Nearest Neighbors algorithm.
+This supervised learning method classifies an unknown data point by assuming
+that any unknown point can best be described by similar points nearby. 
+The model begins by calculating
+the distance (often euclidean, but can be other measures) to the _k = 1, 2, ... n_
+nearest data points. After identifying the nearest neighbors, the model then 
+counts the number of different class types and classifies the unknown point based
+on the plurality of class votes. For example, in a _k=3_ model, if the 3 nearest
+points are class 1, class 1, and class 2, the model classifies the unknown point as
+class 1. This modeling technique is extremely easy to use and understand
+
+## tl;dr
+
+This tutorial servesas an introduction to the _k_-Nearest Neighbors classification tecnique and covers:
+
+1. [Replication Requirements](#replication): What you'll need to reproduce the analysis  in this tutorial.
+
+2. [Train Test Split](#train): How to separate the data frame into a Training set and a Testing set.
+
+3. [Modeling Using `knn`](#knn): How to use the `knn` function from the `class` package.
+
+4. [Refining the model](#subset): How to refine the model using best subset with the `leaps` package.
+
+5. [Selecting the best _k_](#bestk): Select the level of K that gives you the best test set accuracy values.
+
+6. [Learn More](#learnmore): Visit these resources to learn more about _k_ -NN.
+
+## Modeling 
+
+### Replication requirements {#replication}
+
+To reproduce the results below you will need to download the genders dataset
+located at the following link. Make sure you save this file as an .RData file
+type. Additionally, the `tidyverse`, `class`, 'leap', and `ggplot2` packages will be
+used for the analysis.
+
+```{r results='asis',echo=FALSE,message=FALSE, warning = F}
+
+library(tidyverse)
+library(class)
+library(caret)
+library(leaps)
+library(knitr)
+library(readr)
+library(BayesFactorExtras)
+library(kableExtra)
+options(knitr.table.format = "html")
+
+voice <- read_csv("C:/Users/james_vldwy/Desktop/OPER682/OPER682/CourseWork/Student Led Learning/Data/voice.csv", na = "0")
+  
+createDownloadURI("voice", filename = "voicedata", textHTM = "Click here to download the data. Make sure you save the file as voicedata.RData")
+
+
+```
+
+After saving, load it into your enviroment with  `load("voicedata.RData")`[^1].
+We begin by inspecting the dataset.
+
+```{r warning = F} 
+load("voicedata.RData")
+```
+
+```{r echo = F, warning = F}
+
+shape <- dim(voice)
+
+voice %>% 
+  head() %>% 
+kable() %>%
+  kable_styling() %>%
+  scroll_box(width = "900px", height = NULL)
+```
+
+The data set consists of `r shape[1]` rows and `r shape[2]` columns. Additionally,
+scanning the first few lines shows a couple of NA values. Let's continue analysis
+by removing any column with an NA value.
+
+```{r warning = F}
+
+voice <- voice[ , apply(voice, 2, function(x) !any(is.na(x)))]
+
+```
+
+```{r echo = F, warning = F}
+
+shape <- dim(voice)
+```
+
+
+This reduces the dataset to `r shape[1]` rows and `r shape[2]` columns. Notice
+that the number of observations hasn't changed, but we have fewer columns.
+
+### Train and Test Split {#train}
+
+Next, we need to separate the data into a training and testing data set for
+calculations. The primary purpose of this separation is to allow for us to evaluate the model's accuracy by evaluating new data points that weren't used to generate the model.
+We do this transforming the label column into a column of 
+factors and then separating into a training set with an equivalent proportion of
+factors to the original dataset with the function below
+
+```{r echo = T, warning = F}
+
+voice$label <- as.factor(voice$label)
+
+train_test_split <- function(data, groupby_column = ncol(data), samplesize = 0.75, seed = 1) {
+  
+  factors <- levels(data[[groupby_column]])
+  train <- data.frame()
+  test <- data.frame()
+  train_test_split <- list()
+  
+  for (factor in factors) {
+    
+    #Separate original data frame by factors
+    datafactor <- data %>% 
+                  filter(data[,groupby_column] == factor)
+    
+    #set Random Number Generator Seed from input for reproducibility
+    set.seed(seed)
+    smp_size <- floor(samplesize * nrow(datafactor))
+    
+    #build the training and test sets off the randomly generated indices from above
+    train_ind <- sample(seq_len(nrow(datafactor)), size = smp_size)
+    
+    trainfactor <- datafactor[train_ind,]
+    testfactor <- datafactor[-train_ind,]
+    
+    #combine the train/test set for each factor into an overall list
+    train <- rbind(train,trainfactor)
+    test <- rbind(test,testfactor)
+    
+  }
+  
+  train_test_split[[1]] <- as.data.frame(train)
+  train_test_split[[2]] <- as.data.frame(test)
+  
+  return(train_test_split)
+}
+
+tts <- train_test_split(data = voice, groupby_column = 18, seed = 123, samplesize = 0.75)
+
+train <- tts[[1]]
+test <- tts[[2]]
+
+```
+
+
+### _k_-NN using the `class` package {#knn}
+
+The `knn` function from the `class` package takes four primary arguments:
+
+1) Train: your training data set.
+2) Test: the data set you wish to classify
+3) cl: a factor vector of the known classifications from your test set
+4) k: the number of nearest neighbors to consider in classification
+
+To get our two data frames into the appropriate format, we segregate the 
+known classification labels from the data frame.
+
+```{r echo = T, warning = F}
+#separate the two sets to meet KNN function requirements (i.e. remove class labels)
+train_class <- train$label
+train_nolabel <- train %>% 
+  subset(select = -label) %>% 
+  as.data.frame()
+
+test_class <- test$label
+test_nolabel <- test %>% 
+  subset(select = -label) %>% 
+  as.data.frame()
+
+```
+
+
+we then buid our _knn_ model using the function `knn`
+
+```{r echo = T, warning = F}
+
+knn.pred <- knn(train = train_nolabel, test = test_nolabel, cl = train_class, k = 1)
+
+
+```
+
+The `knn.pred` object now contains all of the  information about our kNN model
+that we need. We can provide a confusion matrix and calculate the accuracy rate
+with the following:
+
+```{r warning = F}
+
+accuracy <- mean(knn.pred==test_class)*100 %>% round(digits = 3)
+
+table(knn.pred,test_class) %>% 
+  kable() %>% 
+  kable_styling(bootstrap_options = c("bordered", "striped", "hover"), full_width = F, position = 'center') %>%  
+  add_header_above(c("Predicted " = 1, "Actual" = 2))
+
+
+```
+
+which has an accuracy of `r round(accuracy, digits = 2)`%.
+
+However, we'd like to generate a higher classification accuracy if possible.
+I think that we are probably introducing or accounting for too much noise in our
+model, so let's see if we can reduce the variable set and have a better outcome.
+
+### Refining the model with subset selection in `leaps` {#subset}
+
+
+We will use the `leaps` package and the `regsubsets` function on our
+original data setto try to reduce the number of kept variables. If you are
+interested in learning more about variable subset reduction, be sure to check out
+the [linear model selection tutorial](https://afit-r.github.io/model_selection).
+While we're at it, let's limit the maximum number of variables considered to two
+so that we can plot the results and see what's happening  visually.
+
+First, do the best subset selection with the command
+`best_subset <- regsubsets(label ~ ., voice, nvmax = 1)`
+
+```{r echo = F, warning = F, message = F, results = 'hide'}
+
+best_subset <- regsubsets(label ~ ., voice, nvmax = 1)
+
+```
+
+
+```{r echo = T, warning = F, message = F}
+
+summary(best_subset)
+  
+
+```
+
+The best subset selection shows that the `IQR` and `meanfun` features are
+the best two-feature combination available.
+
+We'll plot these two variables against each other to see if there are any clear
+clusters in the data set
+
+```{r echo = F, message = F, warning = F}
+
+
+  ggplot() +
+  geom_jitter(data = train, aes(x = meanfun, y = IQR, color = label)) + 
+  geom_jitter(data = test, aes(x = meanfun, y = IQR), show.legend = T) + 
+  xlab("Mean Fundamental Frequency") + 
+  ylab("Interquartile Frequency Range") + 
+  ggtitle("Scatterplot of Mean Fundamental Frequency and IQR") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+
+
+The scatter plot shows two clear clusters for male and female speech samples and
+the majority of our test points (black markers) fall within one  of these clusters
+
+Therefore, using these two variables, we will regenerate the kNN model and see 
+if the accuracy improves.
+
+```{r echo = T, message = F, warning = F}
+
+keep <- c("iqr","meanfun")
+
+test_nolabel <- test_nolabel %>% 
+                select(IQR, meanfun)
+
+train_nolabel <- train_nolabel %>% 
+                select(IQR, meanfun)
+
+```
+
+Again, build the _k_ NN model.
+
+```{r echo = T, message = F, warning = F}
+
+
+knn.pred = knn(train = train_nolabel, test = test_nolabel, cl = train_class, k = 1)
+
+
+
+accuracy1 <- mean(knn.pred==test_class)*100 %>% round(digits = 3)
+
+table(knn.pred,test_class) %>%
+  kable(caption = "Confusion Matrix") %>% 
+  kable_styling(bootstrap_options = c("bordered", "striped", "hover"), full_width = F, position = 'center') %>%  
+  add_header_above(c("Predicted" = 1, "Actual" = 2)) 
+
+
+```
+
+By reducing our feature set, we've raised our accuracy to `r round(accuracy1, digits = 2)`%,
+an improvement of over `r round(accuracy1-accuracy, digits = 2)`%
+
+
+### Selecting the best _k_ {#bestk}
+
+For each of the models above, _k_ was aritrarily selected to be 1. This,
+as stated in the introduction, means that the unknown test point will be
+classified based on the nearest data points. However, a different _k_ may be
+more appropriate in ensuring that the model is not too flexible or inflexible. 
+To do this, we'll iterate through a loop of possible _k_ values to determine
+which k is the best.
+
+
+```{r echo = T, message = F, warning = F}
+
+averageaccuracy = vector()
+
+#pick how many k to try
+num_k = 100
+
+for (i in 1:num_k) {
+  #build a model for the i-th k-value
+  knn.pred <- knn(train = train_nolabel, test = test_nolabel, cl = train_class, k = i)
+  
+  #calculate the accuracy
+  averageaccuracy[i] = mean(knn.pred==test_class)
+  
+
+}
+
+  bestk = which.max(averageaccuracy)
+  bestaccuracy = max(averageaccuracy)
+
+
+```
+
+
+By finding the best accuracy from the list, we see that the best _k_ for this data set is `r bestk` with an accuracy of `r round(bestaccuracy, digits = 4)*100`%.
+We can validate that by plotting the average accuracy vector over
+
+```{r echo= T, message = F, warning = F, fig.align = 'center'}
+
+averageaccuracy %>% 
+  as.tibble %>% 
+  ggplot() +
+  geom_line(aes(x= 1:num_k, y = averageaccuracy)) +
+  xlab("Number of k") + 
+  ylab("Accuracy") +
+  scale_x_continuous(breaks = seq(0,num_k,5) ) + 
+  ggtitle("Test Set Accuracy as k Increases") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+
+```
+
+## Learn More {#learnmore}
+
+This tutorial will help you learn the basics about _k_ Nearest Neighbors. To learn
+more visit the
+[_Introduction to Statistical Learning in R_](http://www-bcf.usc.edu/~gareth/ISL/)
+webpage.
+
+[^1]: This data was collected by Korey Becker and is accessible [here](https://www.kaggle.com/primaryobjects/voicegender)
+
+
+## Follow-on Exercises
+
+Using the `iris` data set:
+
+1. Partition the data into a training set and test set.
+2. Build  a kNN model based on the three classification types. What is the 
+test accuracy when `k=1`?
+3. Which `k` is best?
+
