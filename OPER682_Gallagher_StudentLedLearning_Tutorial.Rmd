@@ -14,6 +14,8 @@ output: html_document
 
 ```{r echo = F, eval = T, warning = F}
 
+options(digits = 3)
+
 setDownloadURI <- function(list, filename = stop("'filename' must be specified"), textHTML = "Click here to download the data.", fileext = "RData", envir = parent.frame()){
   require(base64enc,quietly = TRUE)
   divname = paste(sample(LETTERS),collapse="")
@@ -87,7 +89,8 @@ This tutorial serves as an introduction to the _k_-Nearest Neighbors classificat
 
 To reproduce the results below you will need to download the genders dataset
 located at the following link. Make sure you save this file as `voicedata.RData`.
-Additionally, the `tidyverse`, `class`, `knitr`, `kableExtra`, and `leap` packages will be
+Additionally, the `tidyverse`, `plotly`,
+`class`, `knitr`, `kableExtra`, and `leap` packages will be
 used for the analysis.
 
 ```{r results='asis',echo=FALSE,message=FALSE, warning = F}
@@ -98,6 +101,7 @@ library(leaps)
 library(knitr)
 library(readr)
 library(kableExtra)
+library(plotly)
 options(knitr.table.format = "html")
 
 voice <- read_csv("C:/Users/james_vldwy/Desktop/OPER682/OPER682/CourseWork/Student Led Learning/Data/voice.csv", na = "0")
@@ -362,9 +366,9 @@ which k is the best.
 averageaccuracy = vector()
 
 #pick how many k to try
-num_k = 100
+k = 1:100
 
-for (i in 1:num_k) {
+for (i in 1:length(k)) {
   #build a model for the i-th k-value
   knn.pred <- knn(train = train_nolabel, test = test_nolabel, cl = train_class, k = i)
   
@@ -373,7 +377,7 @@ for (i in 1:num_k) {
   
 
 }
-
+  averageaccuracy <- averageaccuracy*100
   bestk = which.max(averageaccuracy)
   bestaccuracy = max(averageaccuracy)
 
@@ -381,23 +385,30 @@ for (i in 1:num_k) {
 ```
 
 
-By finding the best accuracy from the list, we see that the best _k_ for this data set is `r bestk` with an accuracy of `r round(bestaccuracy, digits = 4)*100`%.
+By finding the best accuracy from the list, we see that the best _k_ for this data set is `r bestk` with an accuracy of `r bestaccuracy*100`%.
 We can validate that by plotting the average accuracy vector as _k_ increases. 
 
 
 ```{r echo= T, message = F, warning = F, fig.align = 'center'}
 
-averageaccuracy %>% 
+
+p <- averageaccuracy %>% 
   as.tibble %>% 
   ggplot() +
-  geom_line(aes(x= 1:num_k, y = averageaccuracy)) +
+  geom_line(aes(x= k, y = averageaccuracy)) +
   xlab("Number of k") + 
-  ylab("Accuracy") +
-  scale_x_continuous(breaks = seq(0,num_k,5) ) + 
-  ggtitle("Test Set Accuracy as k Increases") + 
-  theme(plot.title = element_text(hjust = 0.5))
+  ylab("Accuracy (%)") +
+  scale_x_continuous(breaks = seq(0,length(k),5) ) + 
+ggtitle("Test Set Accuracy as k Increases") + 
+ theme(plot.title = element_text(hjust = 0.5))
+
+ggplotly(p = ggplot2::last_plot(), dynamicTicks = F)
 
 
+
+#  averageaccuracy %>% 
+#  as.tibble() %>% 
+#  plot_ly(x = ~1:num_k, y = ~averageaccuracy, type = 'scatter', mode = 'lines')
 
 ```
 
