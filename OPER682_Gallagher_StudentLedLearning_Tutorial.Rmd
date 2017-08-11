@@ -87,7 +87,7 @@ This tutorial serves as an introduction to the _k_-Nearest Neighbors classificat
 
 To reproduce the results below you will need to download the genders dataset
 located at the following link. Make sure you save this file as `voicedata.RData`.
-Additionally, the `tidyverse`, `class`, 'knitr', 'kableExtra', and 'leap' packages will be
+Additionally, the `tidyverse`, `class`, `knitr`, `kableExtra`, and `leap` packages will be
 used for the analysis.
 
 ```{r results='asis',echo=FALSE,message=FALSE, warning = F}
@@ -295,10 +295,11 @@ clusters in the data set
 
   ggplot() +
   geom_jitter(data = train, aes(x = meanfun, y = IQR, color = label)) + 
-  geom_jitter(data = test, aes(x = meanfun, y = IQR), show.legend = T) + 
+      geom_jitter(data = test, aes(x = meanfun, y = IQR)) +
   xlab("Mean Fundamental Frequency") + 
   ylab("Interquartile Frequency Range") + 
-  ggtitle("Scatterplot of Mean Fundamental Frequency and IQR") +
+  ggtitle(label = "Scatterplot of Mean Fundamental Frequency and IQR",
+          subtitle = "Black Points are test set points") +
   theme(plot.title = element_text(hjust = 0.5))
 
 ```
